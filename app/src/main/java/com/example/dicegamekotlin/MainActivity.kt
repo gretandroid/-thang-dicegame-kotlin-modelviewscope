@@ -6,8 +6,9 @@ import android.view.View
 import android.widget.ImageView
 import android.widget.LinearLayout
 import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.ViewModelProvider
 import com.example.dicegamekotlin.databinding.ActivityMainBinding
-import kotlinx.coroutines.*
+import kotlinx.coroutines.delay
 import java.util.*
 import java.util.concurrent.ThreadLocalRandom
 import java.util.function.Consumer
@@ -16,6 +17,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
     private val diceImages: MutableList<ImageView> = ArrayList()
     private lateinit var diceResIds: IntArray
+
+    private lateinit var viewModel: MainViewModel
 
     companion object {
         const val MAX_CYCLE = 70
@@ -27,6 +30,9 @@ class MainActivity : AppCompatActivity() {
 
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
+
+        viewModel = ViewModelProvider(this).get(MainViewModel::class.java)
+
         initDiceImages()
 
         // init models dices
@@ -47,11 +53,27 @@ class MainActivity : AppCompatActivity() {
                 val resId = savedInstanceState.getInt(key)
                 if (resId != 0) {
                     Log.d("MainActivity", "onCreatevalue=$resId")
-                    dice.setImageResource(resId)
-                    dice.tag = resId
+                    viewModel.setDiceValue(diceImages.indexOf(dice), resId);
+//                    dice.setImageResource(resId)
+//                    dice.tag = resId
                 }
             })
         }
+
+        // subcribe observer
+        viewModel.dices.forEach {
+            it.observe(this) { value ->
+                diceImages[viewModel.dices.indexOf(it)].setImageResource(diceResIds[value])
+            }
+        }
+        viewModel.isActiveRotate.observe(this) { isActive ->
+            if (isActive) {
+                refreshRotateButtonToRotate()
+            } else {
+                refreshRotateButtonToRotating()
+            }
+        }
+
         Log.d("MainActivity", "onCreate")
     }
 
@@ -61,14 +83,18 @@ class MainActivity : AppCompatActivity() {
         for (i in 0 until numberDice) {
             diceImages.add(diceGroupLayout.getChildAt(i) as ImageView)
         }
+
+        // init model
+        viewModel.init(numberDice);
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
         super.onSaveInstanceState(outState)
         diceImages.forEach(Consumer { dice: ImageView ->
-            val resId = dice.tag as Int
+//            val resId = dice.tag as Int
+            val resId = viewModel.getDiceValue(diceImages.indexOf(dice))
             val key = buildDiceStateKey(dice)
-            outState.putInt(key, resId)
+            outState.putInt(key, resId!!)
             Log.d(
                 "MainActivity",
                 "onSaveInstanceState[key=$key, value=$resId]"
@@ -84,45 +110,51 @@ class MainActivity : AppCompatActivity() {
         super.onStart()
     }
 
+    // version view model
     fun doRotate(view: View?) {
-
-        // BEGIN
-        CoroutineScope(Dispatchers.Main).launch {
-            refreshRotateButtonToRotating()
-            Log.d("App", "End Begin")
-        }
-        // ROTATING
-        val numberDice = diceImages.size
-        Log.d("App", "Begin ${numberDice}")
-        var jobs = mutableListOf<Job>()
-        var values = IntArray(numberDice)
-        CoroutineScope(Dispatchers.Main).launch {
-//        runBlocking {
-//          withContext (Dispatchers.Main){
-            diceImages.map {
-                launch { values[diceImages.indexOf(it)] = doRotate(it) }
-            }.joinAll()
-            Log.d("App", "Sum ${values.sum()}")
-
-//            }
-//        }
-
-            Log.d("App", "End ${numberDice}")
-            // END
-//            CoroutineScope(Dispatchers.Main).launch {
-                Log.d("App", "Begin Terminate")
-                refreshRotateButtonToRotate()
-//            }
-        }
-
+        viewModel.doRotate()
     }
 
-    private suspend fun doRotate(dice: ImageView) : Int {
+    /**
+    fun doRotate(view: View?) {
+
+    // BEGIN
+    CoroutineScope(Dispatchers.Main).launch {
+    refreshRotateButtonToRotating()
+    Log.d("App", "End Begin")
+    }
+    // ROTATING
+    val numberDice = diceImages.size
+    Log.d("App", "Begin ${numberDice}")
+    var jobs = mutableListOf<Job>()
+    var values = IntArray(numberDice)
+    CoroutineScope(Dispatchers.Main).launch {
+    //        runBlocking {
+    //          withContext (Dispatchers.Main){
+    diceImages.map {
+    launch { values[diceImages.indexOf(it)] = doRotate(it) }
+    }.joinAll()
+    Log.d("App", "Sum ${values.sum()}")
+
+    //            }
+    //        }
+
+    Log.d("App", "End ${numberDice}")
+    // END
+    //            CoroutineScope(Dispatchers.Main).launch {
+    Log.d("App", "Begin Terminate")
+    refreshRotateButtonToRotate()
+    //            }
+    }
+
+    }
+     */
+    private suspend fun doRotate(dice: ImageView): Int {
         val numberCycle = ThreadLocalRandom.current().nextInt(MAX_CYCLE - MIN_CYCLE + 1) + MIN_CYCLE
 //        val numberCycle = MAX_CYCLE
         val random = Random(System.currentTimeMillis())
         var i = 1
-        var resultResId : Int = 0
+        var resultResId: Int = 0
         while (i < numberCycle) {
             resultResId = random.nextInt(6)
             delay((10 * i).toLong())
